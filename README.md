@@ -1,5 +1,4 @@
-*Este proyecto implementa una arquitectura de microservicios robusta para la gestión de pedidos, diseñada bajo los principios de Enterprise Integration Patterns (EIP). 
-El sistema integra flujos síncronos y asíncronos, garantizando la resiliencia y la interoperabilidad con sistemas legados.*
+##Este proyecto implementa una arquitectura de microservicios robusta para la gestión de pedidos, diseñada bajo los principios de Enterprise Integration Patterns (EIP). El sistema integra flujos síncronos y asíncronos, garantizando la resiliencia y la interoperabilidad con sistemas legados.
 
 🚀 Características Técnicas
 API RESTful: Desarrollada en Node.js con seguridad JWT y validación de Idempotencia.
