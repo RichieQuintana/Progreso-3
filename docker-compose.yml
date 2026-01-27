@@ -1,0 +1,82 @@
+services:
+  # Base de Datos: Almacena pedidos y eventos (Requisito 3.1 y 3.4)
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=user_admin
+      - POSTGRES_PASSWORD=secret_password
+      - POSTGRES_DB=orders_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Ejecuta automáticamente tus tablas e inserts iniciales 
+      - ./sql:/docker-entrypoint-initdb.d 
+    networks:
+      - integra_hub_net
+
+  # Broker de Mensajería: Gestiona colas y tópicos (Requisito 4.1)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    ports:
+      - "5672:5672"   # Puerto de comunicación para las apps
+      - "15672:15672" # Interfaz Web obligatoria para la defensa
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin_pass
+    networks:
+      - integra_hub_net
+
+  # API: Punto de entrada con seguridad JWT (Requisito 3.1 y 4.3)
+  orders-api:
+    build: ./orders-api
+    container_name: orders_api
+    depends_on:
+      - db
+      - rabbitmq
+    environment:
+      - DB_HOST=db
+      - RABBIT_HOST=rabbitmq
+      - JWT_SECRET=mi_clave_secreta # Evidencia de seguridad requerida
+    ports:
+      - "9000:8080" # Mapeo corregido para evitar error de puerto ocupado
+    networks:
+      - integra_hub_net
+
+  # Worker: Procesa eventos y maneja resiliencia (Requisito 4.2)
+  order-worker:
+    build: ./order-worker
+    container_name: order_worker
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBIT_HOST=rabbitmq
+      - DB_HOST=db
+    networks:
+      - integra_hub_net
+    volumes:
+      - ./order-worker/inbox:/app/inbox
+
+# Demo Portal (Requisito 5.4)
+  demo_portal:
+    image: nginx:alpine
+    container_name: demo_portal
+    volumes:
+      - ./orders-api/public/index.html:/usr/share/nginx/html/index.html
+    ports:
+      - "80:80"
+    depends_on:
+      - orders-api  
+    networks:
+      - integra_hub_net
+
+
+networks:
+  integra_hub_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+

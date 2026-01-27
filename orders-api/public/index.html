@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><title>IntegraHub - Demo Portal</title></head>
+<body>
+    <h1>IntegraHub: Gestión de Pedidos</h1>
+    <section>
+        <button onclick="crearPedido()">🛒 Crear Pedido Demo</button>
+        <button onclick="crearPedidoFallido()">⚠️ Simular Fallo (DLQ)</button>
+    </section>
+    <hr>
+    <h3>Estado del Sistema [cite: 87]</h3>
+    <div id="health">Cargando status...</div>
+    <hr>
+    <h3>Trazabilidad de Pedidos [cite: 82]</h3>
+    <table border="1" id="orderTable">
+        <tr><th>ID (Correlation)</th><th>Cliente</th><th>Monto</th><th>Estado</th></tr>
+    </table>
+
+    <script>
+        const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYiLCJ1c2VybmFtZSI6InVzZXJfYWRtaW4iLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3MDYzNTAwMDB9.HaAP4UGlHLl3PaMBNi-GU6wjNUrPoTa4RGFDy3DB_zw"; // [cite: 57]
+
+        async function crearPedido(monto = 100.50) {
+            const id = crypto.randomUUID();
+            await fetch('/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
+                body: JSON.stringify({ id, customer_name: "Cliente Demo", total_amount: monto })
+            });
+            actualizarTabla();
+        }
+
+        function crearPedidoFallido() { crearPedido(-1); } // Provoca el nack para DLQ [cite: 47, 117]
+    </script>
+</body>
+
+<h1>IntegraHub Demo Portal</h1>
+<button onclick="enviarPedido()">Crear Pedido Demo</button>
+<p id="resultado"></p>
+
+<script>
+async function enviarPedido() {
+    const res = await fetch('/orders', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer TU_TOKEN_AQUI' 
+        },
+        body: JSON.stringify({
+            id: crypto.randomUUID(),
+            customer_name: "Usuario Web",
+            total_amount: 150.00
+        })
+    });
+    const data = await res.json();
+    document.getElementById('resultado').innerText = "Respuesta: " + JSON.stringify(data);
+}
+</script>
+</html>
