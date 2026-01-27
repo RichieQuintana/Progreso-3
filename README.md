@@ -43,3 +43,11 @@ Resultado: El Worker detecta el archivo, lo inyecta en el bus de mensajería y l
 Acción: Enviar un pedido con total_amount: -50.
 
 Resultado: El Worker rechaza el mensaje por lógica de negocio y RabbitMQ lo desvía a la cola order_dead_letter_queue.
+
+<img width="1284" height="516" alt="image" src="https://github.com/user-attachments/assets/df2a4c4b-d48b-4030-9a54-1c968897cea3" />
+
+<img width="998" height="183" alt="image" src="https://github.com/user-attachments/assets/f10d6a7f-5720-4242-b63f-1f1c04f4899f" />
+
+<img width="401" height="222" alt="image" src="https://github.com/user-attachments/assets/e4d03f14-6647-4ad9-b010-0e14faf8e134" />
+
+<img width="862" height="776" alt="image" src="https://github.com/user-attachments/assets/25dbd391-bb38-4ec3-86e3-60ec31e1fd45" />
