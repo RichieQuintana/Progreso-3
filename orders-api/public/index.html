@@ -12,10 +12,13 @@
         th { background-color: #f8f9fa; color: #555; }
         .status-up { color: #28a745; font-weight: bold; }
         .status-down { color: #dc3545; font-weight: bold; }
-        button { background-color: #1a73e8; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background 0.3s; }
+        button { background-color: #1a73e8; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: background 0.3s; margin-right: 5px; }
         button:hover { background-color: #1557b0; }
-        .btn-error { background-color: #dc3545; margin-left: 10px; }
+        .btn-error { background-color: #dc3545; }
         .btn-error:hover { background-color: #a71d2a; }
+        .btn-random { background-color: #6c757d; }
+        .btn-random:hover { background-color: #5a6268; }
+        code { background: #eee; padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -28,8 +31,9 @@
 
     <div class="card">
         <h3>Operaciones de Pedidos</h3>
-        <button onclick="crearPedido(50)">Generar Pedido Exitoso ($50)</button>
-        <button class="btn-error" onclick="crearPedido(-50)">Generar Pedido Inválido (-$50)</button>
+        <button onclick="crearPedido(50)">Pedido Fijo ($50)</button>
+        <button class="btn-random" onclick="crearPedidoAleatorio(true)">Pedido Azar (Válido)</button>
+        <button class="btn-error" onclick="crearPedidoAleatorio(false)">Pedido Azar (Negativo -> DLQ)</button>
     </div>
 
     <div class="card">
@@ -50,10 +54,9 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN: URL de la API en el puerto 9000
         const API_URL = 'http://localhost:9000';
 
-        // 1. Cargar Salud del Sistema (Requisito 5.5)
+        // 1. Cargar Salud del Sistema
         async function loadStatus() {
             try {
                 const r = await fetch(`${API_URL}/health`);
@@ -61,11 +64,11 @@
                 document.getElementById('status').innerHTML = 
                     `<span class="status-up">● SYSTEM ONLINE</span> (Base de Datos: ${data.database}, Mensajería: ${data.broker})`;
             } catch (e) {
-                document.getElementById('status').innerHTML = `<span class="status-down">● SYSTEM OFFLINE</span> (No se pudo conectar con la API en ${API_URL})`;
+                document.getElementById('status').innerHTML = `<span class="status-down">● SYSTEM OFFLINE</span> (No se pudo conectar con la API)`;
             }
         }
 
-        // 2. Listar Pedidos (Requisito 5.4)
+        // 2. Listar Pedidos para Trazabilidad
         async function loadOrders() {
             try {
                 const res = await fetch(`${API_URL}/orders`);
@@ -78,7 +81,7 @@
                     <tr>
                         <td><code>${o.id}</code></td>
                         <td>${o.customer_name}</td>
-                        <td>$${o.total_amount}</td>
+                        <td>$${parseFloat(o.total_amount).toFixed(2)}</td>
                         <td><strong>${o.status}</strong></td>
                     </tr>
                 `).join('');
@@ -87,20 +90,25 @@
             }
         }
 
-        // 3. Crear Pedido (Flujo A + Seguridad JWT)
-        async function crearPedido(monto) {
+        // 3. Lógica para Pedidos Aleatorios
+        function crearPedidoAleatorio(esValido) {
+            const clientes = ["Matias Romo", "Ariel Ramos", "Pancho", "Richie Quintana", "Demo User"];
+            const cliente = clientes[Math.floor(Math.random() * clientes.length)];
+            const montoBase = (Math.random() * 100 + 1).toFixed(2);
+            const montoFinal = esValido ? montoBase : (montoBase * -1).toFixed(2);
+            
+            crearPedido(montoFinal, cliente);
+        }
+
+        // 4. Crear Pedido (Seguridad JWT + Pub/Sub)
+        async function crearPedido(monto, cliente = "Cliente Demo Portal") {
             try {
-                // Requisito 4.3: Obtener token de seguridad
+                // Obtener Token JWT
                 const tokenRes = await fetch(`${API_URL}/login-demo`);
-                if (!tokenRes.ok) throw new Error('Fallo en autenticación demo');
                 const { token } = await tokenRes.json();
 
-                const id = crypto.randomUUID(); // Usado como Correlation-ID
-                const body = { 
-                    id, 
-                    customer_name: "Cliente Demo Portal", 
-                    total_amount: Number(monto) 
-                };
+                const id = crypto.randomUUID(); // Correlation-ID para Trazabilidad
+                const body = { id, customer_name: cliente, total_amount: Number(monto) };
 
                 const res = await fetch(`${API_URL}/orders`, {
                     method: 'POST',
@@ -112,22 +120,21 @@
                 });
 
                 if (res.ok) {
-                    alert(`Pedido ${id} enviado correctamente.`);
+                    console.log(`Pedido ${id} enviado.`);
                     await loadOrders();
                 } else {
                     const err = await res.json();
-                    alert('Error: ' + (err.error || 'No autorizado'));
+                    alert('Error: ' + (err.error || 'Fallo en validación'));
                 }
             } catch (e) {
-                alert('Error de conexión: ' + e.message);
+                alert('Error de conexión con la API');
             }
         }
 
-        // Inicialización automática al cargar la página
         loadStatus();
         loadOrders();
-        // Refresco automático de la tabla cada 10 segundos
-        setInterval(loadOrders, 10000);
+        setInterval(loadOrders, 5000); // Refresco cada 5 segundos
+        setInterval(loadStatus, 10000); // Check de salud cada 10 segundos
     </script>
 </body>
 </html>

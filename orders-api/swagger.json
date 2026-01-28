@@ -1,17 +1,66 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "IntegraHub Orders API (demo)",
+    "title": "IntegraHub Orders API",
     "version": "1.0.0",
-    "description": "Esquema Swagger mínimo para evitar errores al arrancar en modo demo"
+    "description": "Documentación completa para la gestión de pedidos e integración asíncrona."
   },
   "paths": {
     "/health": {
       "get": {
-        "summary": "Health check",
+        "summary": "Verificar salud del sistema",
         "responses": {
-          "200": { "description": "OK" }
+          "200": { "description": "Sistemas conectados" }
         }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "Listar todos los pedidos",
+        "responses": {
+          "200": { "description": "Lista de pedidos recuperada" }
+        }
+      },
+      "post": {
+        "summary": "Crear un nuevo pedido (Flujo A)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string", "example": "uuid-v4-correlation-id" },
+                  "customer_name": { "type": "string", "example": "Richie Quintana" },
+                  "total_amount": { "type": "number", "example": 50.00 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Pedido recibido y publicado en RabbitMQ" },
+          "401": { "description": "No autorizado - Falta Token JWT" },
+          "409": { "description": "Conflicto - ID de pedido duplicado" }
+        }
+      }
+    },
+    "/login-demo": {
+      "get": {
+        "summary": "Obtener Token JWT de prueba",
+        "responses": {
+          "200": { "description": "Token generado exitosamente" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   }
