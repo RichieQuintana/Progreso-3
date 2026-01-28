@@ -31,6 +31,10 @@ async function startWorker() {
             }
         });
 
+        // Asegurar que la cola principal esté vinculada al Exchange de eventos
+        await channel.assertExchange('order_events', 'fanout', { durable: true });
+        await channel.bindQueue(mainQueue, 'order_events', '');
+
         console.log(" [*] Worker activo. Monitoreando 'inbox' y cola 'order_created'...");
 
         // --- FLUJO C: Integración por Archivos ---

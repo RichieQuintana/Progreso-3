@@ -1,58 +1,133 @@
 <!DOCTYPE html>
 <html lang="es">
-<head><title>IntegraHub - Demo Portal</title></head>
+<head>
+    <meta charset="UTF-8">
+    <title>IntegraHub - Demo Portal</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #f0f2f5; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; }
+        h1 { color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f8f9fa; color: #555; }
+        .status-up { color: #28a745; font-weight: bold; }
+        .status-down { color: #dc3545; font-weight: bold; }
+        button { background-color: #1a73e8; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background 0.3s; }
+        button:hover { background-color: #1557b0; }
+        .btn-error { background-color: #dc3545; margin-left: 10px; }
+        .btn-error:hover { background-color: #a71d2a; }
+    </style>
+</head>
 <body>
-    <h1>IntegraHub: Gestión de Pedidos</h1>
-    <section>
-        <button onclick="crearPedido()">🛒 Crear Pedido Demo</button>
-        <button onclick="crearPedidoFallido()">⚠️ Simular Fallo (DLQ)</button>
-    </section>
-    <hr>
-    <h3>Estado del Sistema [cite: 87]</h3>
-    <div id="health">Cargando status...</div>
-    <hr>
-    <h3>Trazabilidad de Pedidos [cite: 82]</h3>
-    <table border="1" id="orderTable">
-        <tr><th>ID (Correlation)</th><th>Cliente</th><th>Monto</th><th>Estado</th></tr>
-    </table>
+    <h1>🚀 IntegraHub Demo Portal</h1>
+    
+    <div class="card">
+        <h3>Estado del Ecosistema</h3>
+        <div id="status">Cargando salud del sistema...</div>
+    </div>
+
+    <div class="card">
+        <h3>Operaciones de Pedidos</h3>
+        <button onclick="crearPedido(50)">Generar Pedido Exitoso ($50)</button>
+        <button class="btn-error" onclick="crearPedido(-50)">Generar Pedido Inválido (-$50)</button>
+    </div>
+
+    <div class="card">
+        <h3>Trazabilidad de Pedidos (Correlation-ID / Order-ID)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Correlation-ID</th>
+                    <th>Cliente</th>
+                    <th>Monto</th>
+                    <th>Estado Actual</th>
+                </tr>
+            </thead>
+            <tbody id="orders-table">
+                <tr><td colspan="4" style="text-align:center">No hay pedidos registrados</td></tr>
+            </tbody>
+        </table>
+    </div>
 
     <script>
-        const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYiLCJ1c2VybmFtZSI6InVzZXJfYWRtaW4iLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3MDYzNTAwMDB9.HaAP4UGlHLl3PaMBNi-GU6wjNUrPoTa4RGFDy3DB_zw"; // [cite: 57]
+        // CONFIGURACIÓN: URL de la API en el puerto 9000
+        const API_URL = 'http://localhost:9000';
 
-        async function crearPedido(monto = 100.50) {
-            const id = crypto.randomUUID();
-            await fetch('/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
-                body: JSON.stringify({ id, customer_name: "Cliente Demo", total_amount: monto })
-            });
-            actualizarTabla();
+        // 1. Cargar Salud del Sistema (Requisito 5.5)
+        async function loadStatus() {
+            try {
+                const r = await fetch(`${API_URL}/health`);
+                const data = await r.json();
+                document.getElementById('status').innerHTML = 
+                    `<span class="status-up">● SYSTEM ONLINE</span> (Base de Datos: ${data.database}, Mensajería: ${data.broker})`;
+            } catch (e) {
+                document.getElementById('status').innerHTML = `<span class="status-down">● SYSTEM OFFLINE</span> (No se pudo conectar con la API en ${API_URL})`;
+            }
         }
 
-        function crearPedidoFallido() { crearPedido(-1); } // Provoca el nack para DLQ [cite: 47, 117]
+        // 2. Listar Pedidos (Requisito 5.4)
+        async function loadOrders() {
+            try {
+                const res = await fetch(`${API_URL}/orders`);
+                const list = await res.json();
+                const tbody = document.getElementById('orders-table');
+                
+                if (list.length === 0) return;
+
+                tbody.innerHTML = list.map(o => `
+                    <tr>
+                        <td><code>${o.id}</code></td>
+                        <td>${o.customer_name}</td>
+                        <td>$${o.total_amount}</td>
+                        <td><strong>${o.status}</strong></td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.warn('Error al listar pedidos:', e.message);
+            }
+        }
+
+        // 3. Crear Pedido (Flujo A + Seguridad JWT)
+        async function crearPedido(monto) {
+            try {
+                // Requisito 4.3: Obtener token de seguridad
+                const tokenRes = await fetch(`${API_URL}/login-demo`);
+                if (!tokenRes.ok) throw new Error('Fallo en autenticación demo');
+                const { token } = await tokenRes.json();
+
+                const id = crypto.randomUUID(); // Usado como Correlation-ID
+                const body = { 
+                    id, 
+                    customer_name: "Cliente Demo Portal", 
+                    total_amount: Number(monto) 
+                };
+
+                const res = await fetch(`${API_URL}/orders`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (res.ok) {
+                    alert(`Pedido ${id} enviado correctamente.`);
+                    await loadOrders();
+                } else {
+                    const err = await res.json();
+                    alert('Error: ' + (err.error || 'No autorizado'));
+                }
+            } catch (e) {
+                alert('Error de conexión: ' + e.message);
+            }
+        }
+
+        // Inicialización automática al cargar la página
+        loadStatus();
+        loadOrders();
+        // Refresco automático de la tabla cada 10 segundos
+        setInterval(loadOrders, 10000);
     </script>
 </body>
-
-<h1>IntegraHub Demo Portal</h1>
-<button onclick="enviarPedido()">Crear Pedido Demo</button>
-<p id="resultado"></p>
-
-<script>
-async function enviarPedido() {
-    const res = await fetch('/orders', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer TU_TOKEN_AQUI' 
-        },
-        body: JSON.stringify({
-            id: crypto.randomUUID(),
-            customer_name: "Usuario Web",
-            total_amount: 150.00
-        })
-    });
-    const data = await res.json();
-    document.getElementById('resultado').innerText = "Respuesta: " + JSON.stringify(data);
-}
-</script>
 </html>

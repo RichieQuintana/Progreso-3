@@ -1,5 +1,4 @@
 services:
-  # Base de Datos: Almacena pedidos y eventos (Requisito 3.1 y 3.4)
   db:
     image: postgres:16
     container_name: postgres_db
@@ -11,25 +10,22 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Ejecuta automáticamente tus tablas e inserts iniciales 
       - ./sql:/docker-entrypoint-initdb.d 
     networks:
       - integra_hub_net
 
-  # Broker de Mensajería: Gestiona colas y tópicos (Requisito 4.1)
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq_broker
     ports:
-      - "5672:5672"   # Puerto de comunicación para las apps
-      - "15672:15672" # Interfaz Web obligatoria para la defensa
+      - "5672:5672"
+      - "15672:15672" # Requisito 5.3 (Management UI)
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=admin_pass
     networks:
       - integra_hub_net
 
-  # API: Punto de entrada con seguridad JWT (Requisito 3.1 y 4.3)
   orders-api:
     build: ./orders-api
     container_name: orders_api
@@ -38,14 +34,16 @@ services:
       - rabbitmq
     environment:
       - DB_HOST=db
+      - DB_USER=user_admin
+      - DB_PASSWORD=secret_password
+      - DB_NAME=orders_db
       - RABBIT_HOST=rabbitmq
-      - JWT_SECRET=mi_clave_secreta # Evidencia de seguridad requerida
+      - JWT_SECRET=mi_clave_secreta 
     ports:
-      - "9000:8080" # Mapeo corregido para evitar error de puerto ocupado
-    networks:
+      - "9000:9000"
+    networks: 
       - integra_hub_net
 
-  # Worker: Procesa eventos y maneja resiliencia (Requisito 4.2)
   order-worker:
     build: ./order-worker
     container_name: order_worker
@@ -57,14 +55,13 @@ services:
     networks:
       - integra_hub_net
     volumes:
-      - ./order-worker/inbox:/app/inbox
+      - ./order-worker/inbox:/app/inbox # Requisito 3.3 (Inbox)
 
-# Demo Portal (Requisito 5.4)
   demo_portal:
     image: nginx:alpine
     container_name: demo_portal
     volumes:
-      - ./orders-api/public/index.html:/usr/share/nginx/html/index.html
+      - ./orders-api/public:/usr/share/nginx/html 
     ports:
       - "80:80"
     depends_on:
@@ -72,11 +69,9 @@ services:
     networks:
       - integra_hub_net
 
-
 networks:
   integra_hub_net:
     driver: bridge
 
 volumes:
   postgres_data:
-

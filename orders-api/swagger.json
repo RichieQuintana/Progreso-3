@@ -1,0 +1,18 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "IntegraHub Orders API (demo)",
+    "version": "1.0.0",
+    "description": "Esquema Swagger mínimo para evitar errores al arrancar en modo demo"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}
