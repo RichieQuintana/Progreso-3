@@ -1,53 +1,58 @@
-**Este proyecto implementa una arquitectura de microservicios robusta para la gestión de pedidos, diseñada bajo los principios de Enterprise Integration Patterns (EIP). El sistema integra flujos síncronos y asíncronos, garantizando la resiliencia y la interoperabilidad con sistemas legados.**
+IntegraHub - Ecosistema de Gestión de Pedidos (Progreso 3)
 
-🚀 Características Técnicas
-API RESTful: Desarrollada en Node.js con seguridad JWT y validación de Idempotencia.
+Este proyecto implementa un sistema robusto de integración de microservicios utilizando una arquitectura dirigida por eventos, cumpliendo con los estándares de resiliencia, 
+seguridad JWT, idempotencia y gobierno de APIs.
 
-Mensajería Asíncrona: Implementación de RabbitMQ para desacoplamiento de servicios.
+🛠️ Requisitos Previos
 
-Resiliencia: Patrón Dead Letter Channel para el manejo de excepciones de negocio.
+Docker y Docker Compose instalados.
 
-Persistencia Inmutable: Base de datos PostgreSQL para el registro de transacciones.
+No se requiere instalación local de Node.js o bases de datos, ya que todo el entorno está contenedorizado.
 
-Integración Legada: Monitoreo de sistema de archivos (File Transfer) para ingesta de datos JSON.
+🚀 Despliegue con un Solo Comando (Requisito 5.2)
 
-🛠️ Requisitos
-Docker y Docker Compose.
-
-Postman (para pruebas de API).
-
-📥 Instalación y Despliegue
-Clonar el repositorio.
-
-Levantar los servicios:
+Para levantar todo el ecosistema (Base de Datos, Broker, API, Worker y Portal), ejecuta en la raíz del proyecto:
 
 Bash
 
 docker compose up -d --build
-Verificar Salud del Sistema: Accede a http://localhost:9000/health para confirmar que la DB y el Broker están activos.
 
-🧪 Guía de Pruebas (Validación de Consigna)
-1. Flujo A: Compra vía API (Síncrono/Asíncrono)
-Acción: Enviar un POST a http://localhost:9000/orders con un token JWT válido.
+🔗 Accesos Directos (Requisito 5.3 y 5.4)
 
-Resultado: El pedido se guarda en Postgres y se publica en la cola order_created de RabbitMQ.
+Demo Portal (Frontend): http://localhost
 
-Prueba de Idempotencia: Si intentas enviar el mismo ID, recibirás un error 409 Conflict.
+Swagger UI (Documentación): http://localhost:9000/api-docs
 
-2. Flujo C: Ingesta de Archivos (Legado)
-Acción: Colocar un archivo .json en la carpeta order-worker/inbox.
+RabbitMQ Management: http://localhost:15672 (User: admin / Pass: admin_pass)
 
-Resultado: El Worker detecta el archivo, lo inyecta en el bus de mensajería y lo procesa automáticamente.
+Health Check API: http://localhost:9000/health
 
-3. Resiliencia: Dead Letter Queue (DLQ)
-Acción: Enviar un pedido con total_amount: -50.
+Panel de Control: Demo Portal
+<img width="1795" height="999" alt="image" src="https://github.com/user-attachments/assets/e226c3be-b8ab-42ae-b685-26c2fa98e68c" />
 
-Resultado: El Worker rechaza el mensaje por lógica de negocio y RabbitMQ lo desvía a la cola order_dead_letter_queue.
+Gobierno de API: Swagger UI
+<img width="1191" height="989" alt="image" src="https://github.com/user-attachments/assets/1edeb1a7-4488-4002-bdad-03cfa9a6a936" />
 
-<img width="1284" height="516" alt="image" src="https://github.com/user-attachments/assets/df2a4c4b-d48b-4030-9a54-1c968897cea3" />
+<img width="1775" height="850" alt="image" src="https://github.com/user-attachments/assets/bcd1acd5-50a5-4df0-bada-a6e70ebee85d" />
 
-<img width="998" height="183" alt="image" src="https://github.com/user-attachments/assets/f10d6a7f-5720-4242-b63f-1f1c04f4899f" />
+<img width="1788" height="529" alt="image" src="https://github.com/user-attachments/assets/3973b234-ddf3-4d30-97f3-9c35c0ad2991" />
 
-<img width="401" height="222" alt="image" src="https://github.com/user-attachments/assets/e4d03f14-6647-4ad9-b010-0e14faf8e134" />
+Mensajería: RabbitMQ Management
+<img width="1836" height="603" alt="image" src="https://github.com/user-attachments/assets/12879ef9-d98a-4aca-99e7-e9ab5a6624b3" />
 
-<img width="862" height="776" alt="image" src="https://github.com/user-attachments/assets/25dbd391-bb38-4ec3-86e3-60ec31e1fd45" />
+<img width="1493" height="616" alt="image" src="https://github.com/user-attachments/assets/2925d6e9-95c9-48e4-87e6-99555de85090" />
+
+Observabilidad: Health Check & Logs
+<img width="367" height="221" alt="image" src="https://github.com/user-attachments/assets/2a53590c-250c-4971-bb19-b4841657cbc4" />
+
+<img width="1099" height="215" alt="image" src="https://github.com/user-attachments/assets/28d6e7c3-6edc-48f8-89a4-bb0043b545c4" />
+
+Integración Legada: Flujo C (Inbox)
+<img width="506" height="285" alt="image" src="https://github.com/user-attachments/assets/cdbf10c2-ac43-4897-b413-368d91420711" />
+
+
+
+
+
+
+
