@@ -10,7 +10,7 @@
 
 ## Escenario: Fallo de Pago
 
-<img width="778" height="777" alt="image" src="https://github.com/user-attachments/assets/57f67cd9-badd-4c69-b8eb-f4067979fb85" />
+<img width="790" height="728" alt="image" src="https://github.com/user-attachments/assets/d2a4ee2d-d304-47cf-99de-1a96ee0ce000" />
 
 ## Configuración DLQ
 
