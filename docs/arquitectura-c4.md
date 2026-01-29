@@ -2,23 +2,7 @@
 
 ## Nivel 1: Diagrama de Contexto
 
-```
-+------------------+          +----------------------+
-|                  |          |                      |
-|  Cliente/Usuario |--------->|     IntegraHub       |
-|   (Navegador)    |  HTTP    |  (Sistema de Pedidos)|
-|                  |          |                      |
-+------------------+          +----------+-----------+
-                                         |
-                                         | Eventos
-                                         v
-                              +----------+-----------+
-                              |                      |
-                              |  Sistema Legado      |
-                              |  (Archivos CSV/JSON) |
-                              |                      |
-                              +----------------------+
-```
+<img width="274" height="713" alt="image" src="https://github.com/user-attachments/assets/0d1a1ec2-fd0c-4cc7-a041-42df1c6bbe94" />
 
 ### Descripción
 - **Cliente/Usuario**: Accede al Demo Portal para crear y monitorear pedidos
