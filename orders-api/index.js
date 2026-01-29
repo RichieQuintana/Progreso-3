@@ -3,16 +3,17 @@ const { Pool } = require('pg');
 const amqp = require('amqplib');
 const jwt = require('jsonwebtoken');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json'); 
+const swaggerDocument = require('./swagger.json');
 const cors = require('cors');
+const CircuitBreaker = require('opossum');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(express.static('public')); 
+app.use(express.static('public'));
 
 const PORT = process.env.PORT || 9000;
-const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta"; 
+const SECRET_KEY = process.env.JWT_SECRET || "mi_clave_secreta";
 
 // Configuración de Base de Datos
 const pool = new Pool({
@@ -24,6 +25,26 @@ const pool = new Pool({
 });
 
 let channel;
+
+// --- CIRCUIT BREAKER (Requisito 4.2) ---
+const circuitOptions = {
+    timeout: 5000,              // Timeout de 5 segundos
+    errorThresholdPercentage: 50, // Abre si 50% de requests fallan
+    resetTimeout: 10000         // Intenta cerrar después de 10s
+};
+
+// Función envuelta para queries de BD
+async function dbQuery(query, params) {
+    return pool.query(query, params);
+}
+
+// Circuit Breaker para Base de Datos
+const dbBreaker = new CircuitBreaker(dbQuery, circuitOptions);
+
+dbBreaker.on('open', () => console.log('⚡ [Circuit Breaker] ABIERTO - BD no disponible'));
+dbBreaker.on('halfOpen', () => console.log('🔄 [Circuit Breaker] SEMI-ABIERTO - Probando BD...'));
+dbBreaker.on('close', () => console.log('✅ [Circuit Breaker] CERRADO - BD operativa'));
+dbBreaker.fallback(() => ({ rows: [], fallback: true }));
 
 // --- FUNCIONES DE RESILIENCIA (Requisito 4.2) ---
 
@@ -78,31 +99,46 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.get('/health', async (req, res) => {
     try {
-        await pool.query('SELECT 1');
-        res.json({ 
-            status: "UP", 
-            database: "CONNECTED", 
-            broker: channel ? "CONNECTED" : "DOWN" 
+        const dbResult = await dbBreaker.fire('SELECT 1', []);
+        const dbStatus = dbResult.fallback ? "CIRCUIT_OPEN" : "CONNECTED";
+        res.json({
+            status: dbResult.fallback ? "DEGRADED" : "UP",
+            database: dbStatus,
+            broker: channel ? "CONNECTED" : "DOWN",
+            circuitBreaker: dbBreaker.opened ? 'OPEN' : (dbBreaker.halfOpen ? 'HALF-OPEN' : 'CLOSED')
         });
     } catch (e) {
-        res.status(500).json({ status: "DOWN", database: "DISCONNECTED" });
+        res.status(500).json({ status: "DOWN", database: "DISCONNECTED", error: e.message });
     }
 });
 
 app.post('/orders', authenticateJWT, async (req, res) => {
     const { id, customer_name, total_amount } = req.body;
     try {
-        // Idempotencia (Requisito 4.1.6)
-        const check = await pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+        // Idempotencia (Requisito 4.1.6) - Usando Circuit Breaker
+        const check = await dbBreaker.fire('SELECT * FROM orders WHERE id = $1', [id]);
+        if (check.fallback) {
+            return res.status(503).json({ error: "Database temporarily unavailable", circuitBreaker: "OPEN" });
+        }
         if (check.rows.length > 0) return res.status(409).json({ error: "Duplicate Order ID" });
 
-        await pool.query(
+        await dbBreaker.fire(
             'INSERT INTO orders (id, customer_name, total_amount, status) VALUES ($1, $2, $3, $4)',
             [id, customer_name, total_amount, 'RECEIVED']
         );
 
         // Pub/Sub (Requisito 4.1.2)
-        const message = { orderId: id, customer: customer_name, amount: total_amount, correlationId: id };
+        const message = {
+            id: id,
+            orderId: id,
+            customer_name: customer_name,
+            customer: customer_name,
+            total_amount: total_amount,
+            amount: total_amount,
+            correlationId: id,
+            eventType: 'OrderCreated',
+            timestamp: new Date().toISOString()
+        };
         channel.publish('order_events', '', Buffer.from(JSON.stringify(message)), { persistent: true });
 
         res.status(201).json({ message: "Order processed successfully", orderId: id });
@@ -112,17 +148,41 @@ app.post('/orders', authenticateJWT, async (req, res) => {
 });
 
 app.get('/orders', async (req, res) => {
-    const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
-    res.json(result.rows);
+    try {
+        const result = await dbBreaker.fire('SELECT * FROM orders ORDER BY created_at DESC', []);
+        if (result.fallback) {
+            return res.status(503).json({ error: "Database temporarily unavailable", circuitBreaker: "OPEN" });
+        }
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/analytics', authenticateJWT, async (req, res) => {
-    // Flujo D: Analítica Batch (Requisito 3.4)
-    const stats = await pool.query('SELECT COUNT(*) as total, SUM(total_amount) as revenue FROM orders');
+    try {
+        // Flujo D: Analítica Batch (Requisito 3.4)
+        const stats = await dbBreaker.fire('SELECT COUNT(*) as total, SUM(total_amount) as revenue FROM orders', []);
+        if (stats.fallback) {
+            return res.status(503).json({ error: "Database temporarily unavailable", circuitBreaker: "OPEN" });
+        }
+        res.json({
+            report: "Sales Summary",
+            data: stats.rows[0],
+            timestamp: new Date()
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Endpoint para ver estado del Circuit Breaker
+app.get('/circuit-status', (req, res) => {
     res.json({
-        report: "Sales Summary",
-        data: stats.rows[0],
-        timestamp: new Date()
+        database: {
+            state: dbBreaker.opened ? 'OPEN' : (dbBreaker.halfOpen ? 'HALF-OPEN' : 'CLOSED'),
+            stats: dbBreaker.stats
+        }
     });
 });
 

@@ -49,9 +49,13 @@ services:
     container_name: order_worker
     depends_on:
       - rabbitmq
+      - db
     environment:
       - RABBIT_HOST=rabbitmq
       - DB_HOST=db
+      - DB_USER=user_admin
+      - DB_PASSWORD=secret_password
+      - DB_NAME=orders_db
     networks:
       - integra_hub_net
     volumes:
