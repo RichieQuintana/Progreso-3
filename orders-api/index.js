@@ -149,7 +149,22 @@ app.post('/orders', authenticateJWT, async (req, res) => {
 
 app.get('/orders', async (req, res) => {
     try {
-        const result = await dbBreaker.fire('SELECT * FROM orders ORDER BY created_at DESC', []);
+        // Query con último evento para trazabilidad (Requisito 5.4)
+        const query = `
+            SELECT o.*,
+                   e.event_type as last_event,
+                   e.occured_at as last_event_time
+            FROM orders o
+            LEFT JOIN LATERAL (
+                SELECT event_type, occured_at
+                FROM order_events
+                WHERE order_id = o.id
+                ORDER BY occured_at DESC
+                LIMIT 1
+            ) e ON true
+            ORDER BY o.created_at DESC
+        `;
+        const result = await dbBreaker.fire(query, []);
         if (result.fallback) {
             return res.status(503).json({ error: "Database temporarily unavailable", circuitBreaker: "OPEN" });
         }

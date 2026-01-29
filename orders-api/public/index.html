@@ -45,10 +45,11 @@
                     <th>Cliente</th>
                     <th>Monto</th>
                     <th>Estado Actual</th>
+                    <th>Último Evento</th>
                 </tr>
             </thead>
             <tbody id="orders-table">
-                <tr><td colspan="4" style="text-align:center">No hay pedidos registrados</td></tr>
+                <tr><td colspan="5" style="text-align:center">No hay pedidos registrados</td></tr>
             </tbody>
         </table>
     </div>
@@ -74,7 +75,7 @@
                 const res = await fetch(`${API_URL}/orders`);
                 const list = await res.json();
                 const tbody = document.getElementById('orders-table');
-                
+
                 if (list.length === 0) return;
 
                 tbody.innerHTML = list.map(o => `
@@ -83,6 +84,7 @@
                         <td>${o.customer_name}</td>
                         <td>$${parseFloat(o.total_amount).toFixed(2)}</td>
                         <td><strong>${o.status}</strong></td>
+                        <td>${o.last_event ? `<span class="${o.last_event.includes('Confirmed') ? 'status-up' : o.last_event.includes('Rejected') ? 'status-down' : ''}">${o.last_event}</span>` : '-'}</td>
                     </tr>
                 `).join('');
             } catch (e) {
