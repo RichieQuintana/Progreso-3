@@ -4,10 +4,9 @@
 
 <img width="1007" height="976" alt="image" src="https://github.com/user-attachments/assets/32ad3b70-ff6f-4dfd-86e5-994bdd6dcfd7" />
 
-
 ## Escenario: Fallo de Inventario
 
-<img width="593" height="568" alt="image" src="https://github.com/user-attachments/assets/b8f4c2e0-4efa-403a-b5cd-96c90dceb0aa" />
+<img width="737" height="629" alt="image" src="https://github.com/user-attachments/assets/3e47fe1e-ecb9-40e4-8e65-b9bbd2de4162" />
 
 ## Escenario: Fallo de Pago
 
