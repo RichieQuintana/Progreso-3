@@ -1,0 +1,12 @@
+{
+  "name": "inventory-ingestor",
+  "version": "1.0.0",
+  "main": "ingestor.js",
+  "scripts": {
+    "start": "node ingestor.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.3.7",
+    "pg": "^8.17.2"
+  }
+}

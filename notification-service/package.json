@@ -1,0 +1,11 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "main": "notify.js",
+  "scripts": {
+    "start": "node notify.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.9"
+  }
+}

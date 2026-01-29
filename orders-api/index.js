@@ -51,14 +51,86 @@ dbBreaker.fallback(() => ({ rows: [], fallback: true }));
 async function connectRabbit() {
     try {
         const conn = await amqp.connect(`amqp://admin:admin_pass@${process.env.RABBIT_HOST || 'rabbitmq'}`);
-        channel = await conn.createChannel();
+        channel = await conn.createConfirmChannel(); // confirm channel para asegurar publishes
         await channel.assertExchange('order_events', 'fanout', { durable: true });
-        console.log(" [*] Broker RabbitMQ: CONECTADO");
+        console.log(" [*] Broker RabbitMQ: CONECTADO (ConfirmChannel)");
+        // Intentar enviar eventos pendientes cuando la conexión esté lista
+        await flushPendingEvents();
     } catch (err) {
         console.error(" [!] RabbitMQ no listo, reintentando en 5s...");
         setTimeout(connectRabbit, 5000);
     }
 }
+
+let pendingEvents = [];
+
+async function publishWithRetry(exchange, routingKey, payload, options = {}, attempts = 5, delay = 2000) {
+    // Intentar publicar, reintentando conexión si es necesario
+    if (!channel) {
+        for (let i = 0; i < attempts; i++) {
+            console.warn(`[!] Rabbit channel no disponible, reintento ${i+1}/${attempts}`);
+            await new Promise(r => setTimeout(r, delay));
+            if (channel) break;
+            await connectRabbit();
+        }
+    }
+    if (channel) {
+        try {
+            channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(payload)), options);
+            // Esperar confirmación del broker (ConfirmChannel)
+            if (channel.waitForConfirms) {
+                await channel.waitForConfirms();
+            }
+            return true;
+        } catch (e) {
+            console.error('[!] Error publicando evento:', e.message);
+        }
+    }
+    // Si falla, encolar para intentarlo luego
+    pendingEvents.push({ exchange, routingKey, payload, options });
+    return false;
+}
+
+async function flushPendingEvents() {
+    if (!channel || pendingEvents.length === 0) return;
+    const items = pendingEvents.splice(0);
+    for (const ev of items) {
+        try {
+            channel.publish(ev.exchange, ev.routingKey, Buffer.from(JSON.stringify(ev.payload)), ev.options);
+            console.log('[*] Evento pendiente enviado:', ev.payload.eventType || ev.payload.id || ev.payload.orderId);
+        } catch (e) {
+            console.error('[!] Falló flush, reencolando:', e.message);
+            pendingEvents.unshift(ev);
+            break;
+        }
+    }
+}
+
+setInterval(flushPendingEvents, 5000);
+
+// Outbox flusher: publica eventos desde la tabla outbox y marca como publicados
+async function flushOutboxBatch(limit = 10) {
+    if (!channel) return; // si no hay broker, no intentamos
+    try {
+        const res = await pool.query('SELECT id, aggregate_type, aggregate_id, event_type, payload, tries FROM outbox WHERE published = FALSE ORDER BY created_at ASC LIMIT $1', [limit]);
+        for (const row of res.rows) {
+            try {
+                const payload = row.payload; // JSON object
+                channel.publish('order_events', '', Buffer.from(JSON.stringify(payload)), { persistent: true });
+                if (channel.waitForConfirms) await channel.waitForConfirms();
+                await pool.query('UPDATE outbox SET published = TRUE, published_at = NOW() WHERE id = $1', [row.id]);
+                console.log('[Outbox] Evento publicado y marcado:', row.event_type, row.aggregate_id);
+            } catch (e) {
+                console.error('[Outbox] Error publicando evento id=' + row.id + ':', e.message);
+                await pool.query('UPDATE outbox SET tries = tries + 1, last_error = $1 WHERE id = $2', [e.message, row.id]);
+            }
+        }
+    } catch (err) {
+        console.error('[Outbox] Error al leer outbox:', err.message);
+    }
+}
+
+setInterval(() => flushOutboxBatch(10), 3000);
 
 async function startServer() {
     try {
@@ -78,7 +150,7 @@ async function startServer() {
     }
 }
 
-// Middleware de Seguridad JWT (Requisito 4.3)
+// Middleware de Seguridad JWT (Requisito 4.3) - mantiene demo
 const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader) {
@@ -91,6 +163,21 @@ const authenticateJWT = (req, res, next) => {
     } else {
         res.sendStatus(401);
     }
+};
+
+// Middleware para OAuth2 client_credentials (verifica scope)
+const authenticateScope = (requiredScope) => (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.sendStatus(401);
+    const token = authHeader.split(' ')[1];
+    const secret = process.env.AUTH_SECRET || SECRET_KEY || 'auth_shared_secret';
+    jwt.verify(token, secret, (err, payload) => {
+        if (err) return res.sendStatus(403);
+        const scopes = (payload.scope || '').split(/\s+/);
+        if (requiredScope && !scopes.includes(requiredScope)) return res.status(403).json({ error: 'insufficient_scope' });
+        req.user = payload;
+        next();
+    });
 };
 
 // --- ENDPOINTS ---
@@ -112,7 +199,7 @@ app.get('/health', async (req, res) => {
     }
 });
 
-app.post('/orders', authenticateJWT, async (req, res) => {
+app.post('/orders', authenticateScope('orders:write'), async (req, res) => {
     const { id, customer_name, total_amount } = req.body;
     try {
         // Idempotencia (Requisito 4.1.6) - Usando Circuit Breaker
@@ -122,12 +209,7 @@ app.post('/orders', authenticateJWT, async (req, res) => {
         }
         if (check.rows.length > 0) return res.status(409).json({ error: "Duplicate Order ID" });
 
-        await dbBreaker.fire(
-            'INSERT INTO orders (id, customer_name, total_amount, status) VALUES ($1, $2, $3, $4)',
-            [id, customer_name, total_amount, 'RECEIVED']
-        );
-
-        // Pub/Sub (Requisito 4.1.2)
+        // Usar Outbox Pattern: insertar ORDER y OUTBOX en la misma transacción
         const message = {
             id: id,
             orderId: id,
@@ -139,7 +221,21 @@ app.post('/orders', authenticateJWT, async (req, res) => {
             eventType: 'OrderCreated',
             timestamp: new Date().toISOString()
         };
-        channel.publish('order_events', '', Buffer.from(JSON.stringify(message)), { persistent: true });
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('INSERT INTO orders (id, customer_name, total_amount, status) VALUES ($1, $2, $3, $4)',
+                [id, customer_name, total_amount, 'RECEIVED']);
+            await client.query('INSERT INTO outbox (aggregate_type, aggregate_id, event_type, payload) VALUES ($1,$2,$3,$4)',
+                ['order', id, 'OrderCreated', message]);
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw txErr;
+        }
+        client.release();
 
         res.status(201).json({ message: "Order processed successfully", orderId: id });
     } catch (err) {
@@ -187,7 +283,8 @@ app.get('/circuit-status', (req, res) => {
 });
 
 app.get('/login-demo', (req, res) => {
-    const token = jwt.sign({ user: 'demo_user' }, SECRET_KEY, { expiresIn: '1h' });
+    // Token demo incluye scopes para facilitar pruebas: orders:write y orders:read
+    const token = jwt.sign({ user: 'demo_user', scope: 'orders:write orders:read' }, SECRET_KEY, { expiresIn: '1h' });
     res.json({ token });
 });
 

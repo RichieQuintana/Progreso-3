@@ -23,7 +23,7 @@
       },
       "post": {
         "summary": "Crear un nuevo pedido (Flujo A)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [{ "oauth2": ["orders:write"] }],
         "requestBody": {
           "required": true,
           "content": {
@@ -82,5 +82,19 @@
         "bearerFormat": "JWT"
       }
     }
-  }
+  },
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "http://auth-service:4000/token",
+            "scopes": {
+              "orders:write": "Create orders",
+              "orders:read": "Read orders"
+            }
+          }
+        }
+      }
+    }
 }

@@ -56,10 +56,47 @@ services:
       - DB_USER=user_admin
       - DB_PASSWORD=secret_password
       - DB_NAME=orders_db
+      - FORCE_INVENTORY=${FORCE_INVENTORY:-random} # ok|fail|random
+      - FORCE_PAYMENT=${FORCE_PAYMENT:-random}     # ok|fail|random
     networks:
       - integra_hub_net
     volumes:
       - ./order-worker/inbox:/app/inbox # Requisito 3.3 (Inbox)
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification_service
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBIT_HOST=rabbitmq
+    networks:
+      - integra_hub_net
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth_service
+    environment:
+      - AUTH_SECRET=auth_shared_secret
+    ports:
+      - "4000:4000"
+    networks:
+      - integra_hub_net
+
+  inventory-ingestor:
+    build: ./inventory-ingestor
+    container_name: inventory_ingestor
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=user_admin
+      - DB_PASSWORD=secret_password
+      - DB_NAME=orders_db
+    volumes:
+      - ./csv-inbox:/app/inbox
+    networks:
+      - integra_hub_net
 
   demo_portal:
     image: nginx:alpine

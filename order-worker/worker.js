@@ -2,9 +2,15 @@ const amqp = require('amqplib');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const CircuitBreaker = require('opossum');
 
 // Configuración de rutas para archivos legados (Flujo C)
 const inboxPath = path.join(__dirname, 'inbox');
+
+// Feature toggles para pruebas deterministas (FORCE_INVENTORY=ok|fail|random)
+const FORCE_INVENTORY = process.env.FORCE_INVENTORY || 'random';
+const FORCE_PAYMENT = process.env.FORCE_PAYMENT || 'random';
+
 
 // Conexión a Base de Datos para actualizar estados
 const pool = new Pool({
@@ -117,6 +123,62 @@ async function startWorker() {
         await channel.assertQueue(notificationsQueue, { durable: true });
         await channel.bindQueue(notificationsQueue, 'order_events', '');
 
+        // 4. Cola de reintento (backoff) - reenviará a mainQueue tras TTL
+        const retryQueue = 'order_retry';
+        await channel.assertQueue(retryQueue, {
+            durable: true,
+            arguments: {
+                'x-dead-letter-exchange': '',
+                'x-dead-letter-routing-key': mainQueue,
+                'x-message-ttl': 10000 // 10s backoff
+            }
+        });
+
+        // Prefetch para controlar paralelismo
+        channel.prefetch(1);
+
+        // Circuit Breakers para servicios (inventario y pago)
+        const circuitOptions = {
+            timeout: 5000,
+            errorThresholdPercentage: 50,
+            resetTimeout: 10000
+        };
+
+        const inventoryCheck = (orderId, amount) => {
+            // Forzar resultado si se solicitó (para pruebas deterministas)
+            if (FORCE_INVENTORY === 'ok') return Promise.resolve(true);
+            if (FORCE_INVENTORY === 'fail') return Promise.resolve(false);
+            // Simulador original
+            return Promise.resolve(checkInventory(orderId, amount));
+        };
+
+        const paymentProcess = (orderId, amount) => {
+            if (FORCE_PAYMENT === 'ok') return Promise.resolve(true);
+            if (FORCE_PAYMENT === 'fail') return Promise.resolve(false);
+            return Promise.resolve(processPayment(orderId, amount));
+        };
+
+        const inventoryBreaker = new CircuitBreaker(inventoryCheck, circuitOptions);
+        inventoryBreaker.fallback(() => {
+            console.warn('⚠️ [CircuitBreaker] Inventario - fallback activado (transitorio)');
+            return false; // tratar como resultado temporalmente no disponible
+        });
+
+        inventoryBreaker.on('open', () => console.warn('⚡ [CircuitBreaker] INVENTARIO ABIERTO'));
+        inventoryBreaker.on('halfOpen', () => console.warn('🔄 [CircuitBreaker] INVENTARIO SEMI-ABIERTO'));
+        inventoryBreaker.on('close', () => console.log('✅ [CircuitBreaker] INVENTARIO CERRADO'));
+
+        const paymentBreaker = new CircuitBreaker(paymentProcess, circuitOptions);
+        paymentBreaker.fallback(() => {
+            console.warn('⚠️ [CircuitBreaker] Pago - fallback activado (transitorio)');
+            return false;
+        });
+
+        paymentBreaker.on('open', () => console.warn('⚡ [CircuitBreaker] PAGO ABIERTO'));
+        paymentBreaker.on('halfOpen', () => console.warn('🔄 [CircuitBreaker] PAGO SEMI-ABIERTO'));
+        paymentBreaker.on('close', () => console.log('✅ [CircuitBreaker] PAGO CERRADO'));
+
+
         console.log(" [*] Worker activo. Monitoreando 'inbox', 'order_created' y 'notifications'...");
 
         // --- FLUJO C: Integración por Archivos ---
@@ -144,7 +206,7 @@ async function startWorker() {
                 try {
                     const order = JSON.parse(msg.content.toString());
 
-                    // FILTRO: Ignorar eventos que no sean pedidos nuevos (evita bucle infinito)
+                                // FILTRO: Ignorar eventos que no sean pedidos nuevos (evita bucle infinito)
                     if (order.eventType && order.eventType !== 'OrderCreated') {
                         channel.ack(msg); // Ack silencioso para eventos de notificación
                         return;
@@ -157,6 +219,18 @@ async function startWorker() {
 
                     console.log(`\n========== PROCESANDO PEDIDO ==========`);
                     console.log(`ID: ${id} | Cliente: ${customer} | Monto: $${monto}`);
+
+                    // Idempotencia: verificar si ya fue procesado
+                    try {
+                        const check = await pool.query('SELECT status FROM orders WHERE id = $1', [id]);
+                        if (check.rows.length > 0 && (check.rows[0].status === 'CONFIRMED' || check.rows[0].status === 'REJECTED')) {
+                            console.log(` [i] Pedido ${id} ya procesado: ${check.rows[0].status} -> ACK`);
+                            channel.ack(msg);
+                            return;
+                        }
+                    } catch (err) {
+                        console.error(' [!] Error comprobando idempotencia:', err.message);
+                    }
 
                     // PASO 1: Validación básica
                     if (isNaN(monto) || monto < 0) {
@@ -176,9 +250,31 @@ async function startWorker() {
                         return;
                     }
 
-                    // PASO 2: Validar Inventario (Requisito 3.1.3)
-                    const inventoryOk = checkInventory(id, monto);
+                    // PASO 2: Validar Inventario (Requisito 3.1.3) usando Circuit Breaker
+                    let inventoryOk = false;
+                    try {
+                        inventoryOk = await inventoryBreaker.fire(id, monto);
+                    } catch (err) {
+                        console.error(' [!] Error invocando inventoryBreaker:', err.message);
+                        inventoryOk = false;
+                    }
+
                     if (!inventoryOk) {
+                        // Si el breaker está abierto, tratamos como transitorio y reenviamos a retry-queue
+                        if (inventoryBreaker.opened) {
+                            console.log(` [!] Inventario temporalmente no disponible (breaker abierto). Reintentar en cola de retry.`);
+                            try {
+                                channel.sendToQueue(retryQueue, Buffer.from(JSON.stringify(order)), { persistent: true });
+                                channel.ack(msg);
+                                return;
+                            } catch (err) {
+                                console.error(' [!] Falló enviar a retryQueue:', err.message);
+                                channel.nack(msg, false, false);
+                                return;
+                            }
+                        }
+
+                        // Inventario permanentemente insuficiente
                         console.log(` [!] RECHAZADO: Sin inventario disponible. -> DLQ`);
                         await updateOrderStatus(id, 'REJECTED');
                         await logOrderEvent(id, 'OrderRejected', { reason: 'Insufficient inventory' });
@@ -197,9 +293,30 @@ async function startWorker() {
                     await updateOrderStatus(id, 'INVENTORY_RESERVED');
                     await logOrderEvent(id, 'InventoryReserved', { orderId: id });
 
-                    // PASO 3: Procesar Pago (Requisito 3.1.4)
-                    const paymentOk = processPayment(id, monto);
+                    // PASO 3: Procesar Pago (Requisito 3.1.4) con Circuit Breaker
+                    let paymentOk = false;
+                    try {
+                        paymentOk = await paymentBreaker.fire(id, monto);
+                    } catch (err) {
+                        console.error(' [!] Error invocando paymentBreaker:', err.message);
+                        paymentOk = false;
+                    }
+
                     if (!paymentOk) {
+                        // Si breaker abierto -> transitorio -> enviar a retry
+                        if (paymentBreaker.opened) {
+                            console.log(` [!] Pago temporalmente no disponible (breaker abierto). Reintentar en cola de retry.`);
+                            try {
+                                channel.sendToQueue(retryQueue, Buffer.from(JSON.stringify(order)), { persistent: true });
+                                channel.ack(msg);
+                                return;
+                            } catch (err) {
+                                console.error(' [!] Falló enviar a retryQueue:', err.message);
+                                channel.nack(msg, false, false);
+                                return;
+                            }
+                        }
+
                         console.log(` [!] RECHAZADO: Pago fallido. -> DLQ`);
                         await updateOrderStatus(id, 'PAYMENT_FAILED');
                         await logOrderEvent(id, 'OrderRejected', { reason: 'Payment failed' });
