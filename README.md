@@ -51,6 +51,14 @@ Observabilidad: Health Check & Logs
 
 <img width="1099" height="215" alt="image" src="https://github.com/user-attachments/assets/28d6e7c3-6edc-48f8-89a4-bb0043b545c4" />
 
+<img width="1471" height="166" alt="image" src="https://github.com/user-attachments/assets/236f717d-edce-480c-a222-fd41fc687275" />
+
+<img width="1460" height="692" alt="image" src="https://github.com/user-attachments/assets/a34a2433-1987-4bcb-82a2-d6e4439142e3" />
+
+<img width="1312" height="270" alt="image" src="https://github.com/user-attachments/assets/bcf2f70a-fb8a-45fa-964b-a60fc0ddad06" />
+
+<img width="1469" height="650" alt="image" src="https://github.com/user-attachments/assets/53a14867-0d06-4a6d-b983-9e0af36fc628" />
+
 Integración Legada: Flujo C (Inbox)
 
 <img width="506" height="285" alt="image" src="https://github.com/user-attachments/assets/cdbf10c2-ac43-4897-b413-368d91420711" />
