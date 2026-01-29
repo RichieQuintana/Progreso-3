@@ -2,163 +2,16 @@
 
 ## Flujo de Error con Dead Letter Queue
 
-```
-Usuario          Demo Portal       Orders API        RabbitMQ         Worker           PostgreSQL
-   |                  |                 |                |                |                  |
-   |  1. Crear pedido |                 |                |                |                  |
-   |  con monto       |                 |                |                |                  |
-   |  NEGATIVO (-50)  |                 |                |                |                  |
-   |---------------->|                 |                |                |                  |
-   |                 |                 |                |                |                  |
-   |                 | 2. POST /orders |                |                |                  |
-   |                 | (monto: -50)    |                |                |                  |
-   |                 |---------------->|                |                |                  |
-   |                 |                 |                |                |                  |
-   |                 |                 | 3. INSERT order (RECEIVED)      |                  |
-   |                 |                 |-------------------------------------------------->|
-   |                 |                 |                |                |                  |
-   |                 |                 | 4. Publish OrderCreated         |                  |
-   |                 |                 |--------------->|                |                  |
-   |                 |                 |                |                |                  |
-   |                 | 5. 201 Created  |                |                |                  |
-   |                 |<----------------|                |                |                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                | 6. Deliver to  |                  |
-   |                 |                 |                | order_created  |                  |
-   |                 |                 |                |--------------->|                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                |                | 7. Validate      |
-   |                 |                 |                |                |    amount        |
-   |                 |                 |                |                |-------+          |
-   |                 |                 |                |                |       |          |
-   |                 |                 |                |                |<------+          |
-   |                 |                 |                |                | MONTO NEGATIVO!  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                |                | 8. UPDATE        |
-   |                 |                 |                |                | status=REJECTED  |
-   |                 |                 |                |                |----------------->|
-   |                 |                 |                |                |                  |
-   |                 |                 |                |                | 9. Log Event     |
-   |                 |                 |                |                | OrderRejected    |
-   |                 |                 |                |                |----------------->|
-   |                 |                 |                |                |                  |
-   |                 |                 |                | 10. Publish    |                  |
-   |                 |                 |                | OrderRejected  |                  |
-   |                 |                 |                |<---------------|                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                |                | 11. NACK         |
-   |                 |                 |                |                | (requeue=false)  |
-   |                 |                 |                |<---------------|                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                | 12. Route to   |                  |
-   |                 |                 |                | DLX -> DLQ     |                  |
-   |                 |                 |                |-------+        |                  |
-   |                 |                 |                |       |        |                  |
-   |                 |                 |                |<------+        |                  |
-   |                 |                 |                | (message in    |                  |
-   |                 |                 |                | dead_letter_   |                  |
-   |                 |                 |                | queue)         |                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                | 13. Notify     |                  |
-   |                 |                 |                | Operations     |                  |
-   |                 |                 |                | (webhook)      |                  |
-   |                 |                 |                |<---------------|                  |
-   |                 |                 |                |                |                  |
-   |                 |                 |                | 14. Notify     |                  |
-   |                 |                 |                | Customer       |                  |
-   |                 |                 |                | (email sim)    |                  |
-   |                 |                 |                |<---------------|                  |
-   |                 |                 |                |                |                  |
-```
+<img width="1007" height="976" alt="image" src="https://github.com/user-attachments/assets/32ad3b70-ff6f-4dfd-86e5-994bdd6dcfd7" />
+
 
 ## Escenario: Fallo de Inventario
 
-```
-Worker recibe mensaje
-       |
-       v
-+------+-------+
-| Check        |
-| Inventory    |
-| (Random 30%  |
-|  falla)      |
-+------+-------+
-       |
-       | SIN STOCK
-       v
-+------+-------+
-| UPDATE order |
-| status =     |
-| REJECTED     |
-+------+-------+
-       |
-       v
-+------+-------+
-| Publish      |
-| OrderRejected|
-| reason:      |
-| "Insufficient|
-|  inventory"  |
-+------+-------+
-       |
-       v
-+------+-------+
-| NACK message |
-| -> DLQ       |
-+--------------+
-```
+<img width="593" height="568" alt="image" src="https://github.com/user-attachments/assets/b8f4c2e0-4efa-403a-b5cd-96c90dceb0aa" />
 
 ## Escenario: Fallo de Pago
 
-```
-Worker recibe mensaje
-       |
-       v
-+------+-------+
-| Check        |
-| Inventory    |
-| -> OK        |
-+------+-------+
-       |
-       v
-+------+-------+
-| UPDATE       |
-| INVENTORY_   |
-| RESERVED     |
-+------+-------+
-       |
-       v
-+------+-------+
-| Process      |
-| Payment      |
-| (Random 20%  |
-|  falla)      |
-+------+-------+
-       |
-       | PAGO RECHAZADO
-       v
-+------+-------+
-| UPDATE order |
-| status =     |
-| PAYMENT_     |
-| FAILED       |
-+------+-------+
-       |
-       v
-+------+-------+
-| Publish      |
-| OrderRejected|
-| reason:      |
-| "Payment     |
-|  failed"     |
-+------+-------+
-       |
-       v
-+------+-------+
-| NACK message |
-| -> DLQ       |
-+--------------+
-```
+<img width="778" height="777" alt="image" src="https://github.com/user-attachments/assets/57f67cd9-badd-4c69-b8eb-f4067979fb85" />
 
 ## Configuración DLQ
 
