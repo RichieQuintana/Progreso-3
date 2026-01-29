@@ -14,6 +14,7 @@
 ## Nivel 2: Diagrama de Contenedores
 
 <img width="486" height="1151" alt="image" src="https://github.com/user-attachments/assets/c922d960-b1cd-41f2-ad92-02b857912fe4" />
+
 # Versión sin dependencias externas
 
 <img width="496" height="497" alt="image" src="https://github.com/user-attachments/assets/da68fa2f-c6e8-4c07-ba3e-759d06222d5e" />
