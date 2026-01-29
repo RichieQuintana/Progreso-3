@@ -144,6 +144,12 @@ async function startWorker() {
                 try {
                     const order = JSON.parse(msg.content.toString());
 
+                    // FILTRO: Ignorar eventos que no sean pedidos nuevos (evita bucle infinito)
+                    if (order.eventType && order.eventType !== 'OrderCreated') {
+                        channel.ack(msg); // Ack silencioso para eventos de notificación
+                        return;
+                    }
+
                     // Extraer datos del pedido
                     const id = order.id || order.orderId || "N/A";
                     const monto = Number(order.total_amount || order.amount);
