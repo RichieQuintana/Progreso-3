@@ -38,15 +38,15 @@ IntegraHub es un ecosistema de microservicios orientado a la gestión de pedidos
 ## ⚙️ Patrones y características clave
 
 - **Outbox pattern**: asegura atomicidad DB→evento (tabla `outbox` + flusher que publica).
-- 
+  
 - **Circuit Breakers**: `opossum` para DB, inventario y pago (evita cascada de fallos).
-- 
+  
 - **DLX / DLQ / Retry queue**: para reintentos y aislamiento de fallos permanentes.
-- 
+  
 - **Idempotencia**: comprobación antes de procesar pedidos.
-- 
+  
 - **Seguridad**: JWT demo (`/login-demo`) y servidor auth para OAuth2 `client_credentials`.
-- 
+  
 - **Observabilidad**: `GET /health`, `GET /circuit-status`, logs por servicio, RabbitMQ Management, Swagger UI.
 
 ---
