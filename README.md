@@ -1,63 +1,93 @@
-IntegraHub - Ecosistema de Gestión de Pedidos (Progreso 3)
+# IntegraHub — Ecosistema de Gestión de Pedidos ✅
 
-Este proyecto implementa un sistema robusto de integración de microservicios utilizando una arquitectura dirigida por eventos, cumpliendo con los estándares de resiliencia, 
-seguridad JWT, idempotencia y gobierno de APIs.
+**Descripción breve**
+IntegraHub es un ecosistema de microservicios orientado a la gestión de pedidos con arquitectura basada en eventos. Implementa patrones de resiliencia (Circuit Breaker), Outbox, colas con DLQ/retry, idempotencia y autenticación JWT. Está diseñado para desplegarse localmente con Docker Compose.
 
-🛠️ Requisitos Previos
+---
 
-Docker y Docker Compose instalados.
+## 🔧 Componentes principales
 
-No se requiere instalación local de Node.js o bases de datos, ya que todo el entorno está contenedorizado.
+- **`orders-api`** (`orders-api/`)
+  - API REST para crear y consultar pedidos.
+  - Endpoints clave: `POST /orders`, `GET /orders`, `GET /health`, `GET /login-demo`, `/api-docs` (Swagger).
+  - Implementa: Outbox pattern, circuit breaker para BD, publicación a exchange `order_events`.
 
-🚀 Despliegue con un Solo Comando (Requisito 5.2)
+- **`order-worker`** (`order-worker/`)
+  - Consume eventos `order_created` y procesa el pedido (inventario, pago, confirmación).
+  - Maneja DLX/DLQ, cola de retry, idempotencia, logging de eventos y notificaciones.
+  - Observa carpeta `order-worker/inbox` para integración por archivos (Flujo C).
 
-Para levantar todo el ecosistema (Base de Datos, Broker, API, Worker y Portal), ejecuta en la raíz del proyecto:
+- **`notification-service`** (`notification-service/`)
+  - Consumidor Pub/Sub que recibe eventos `OrderConfirmed`/`OrderRejected` y simula notificaciones a operaciones/cliente.
 
-Bash
+- **`inventory-ingestor`** (`inventory-ingestor/`)
+  - Observa `csv-inbox/` y procesa CSVs con columnas `sku,name,quantity`, actualiza tabla `inventory`. Archiva en `processed/` o `errors/`.
+
+- **`auth-service`** (`auth-service/`)
+  - Emite tokens con flujo `client_credentials` (demo). Endpoint: `POST /token`.
+
+- **Infra & utilidades**
+  - Postgres con esquema en `sql/init.sql`.
+  - RabbitMQ (UI en puerto `15672`).
+  - Demo Portal: contenido estático en `orders-api/public` servido por nginx (puerto `80`).
+  - Script de prueba: `scripts/test_pubsub.sh`.
+  - Colección Postman: `postman/integrahub-postman-collection.json`.
+
+---
+
+## ⚙️ Patrones y características clave
+
+- **Outbox pattern**: asegura atomicidad DB→evento (tabla `outbox` + flusher que publica).
+- 
+- **Circuit Breakers**: `opossum` para DB, inventario y pago (evita cascada de fallos).
+- 
+- **DLX / DLQ / Retry queue**: para reintentos y aislamiento de fallos permanentes.
+- 
+- **Idempotencia**: comprobación antes de procesar pedidos.
+- 
+- **Seguridad**: JWT demo (`/login-demo`) y servidor auth para OAuth2 `client_credentials`.
+- 
+- **Observabilidad**: `GET /health`, `GET /circuit-status`, logs por servicio, RabbitMQ Management, Swagger UI.
+
+---
+
+## 🧰 Requisitos previos
+
+- Docker y Docker Compose instalados.
+- 
+- No es necesario Node.js local; todo corre en contenedores.
+
+---
+
+## 🚀 Arranque rápido (Local)
+
+1. En la raíz del proyecto:
+
+```bash
 
 docker compose up -d --build
+```
 
-🔗 Accesos Directos (Requisito 5.3 y 5.4)
+2. Verificar servicios:
+   
+- Swagger: http://localhost:9000/api-docs
+  
+- Demo Portal: http://localhost
+  
+- RabbitMQ UI: http://localhost:15672 (user: `admin`, pass: `admin_pass`)
+  
+- Auth service: http://localhost:4000
+  
+- Health API: http://localhost:9000/health
 
-Demo Portal (Frontend): http://localhost
+3. Ver logs:
+   
+```bash
+docker compose logs -f orders-api
 
-Swagger UI (Documentación): http://localhost:9000/api-docs
+docker compose logs -f order-worker
 
-RabbitMQ Management: http://localhost:15672 (User: admin / Pass: admin_pass)
-
-Health Check API: http://localhost:9000/health
-
-Panel de Control: Demo Portal
-
-<img width="1795" height="999" alt="image" src="https://github.com/user-attachments/assets/e226c3be-b8ab-42ae-b685-26c2fa98e68c" />
-
-Gobierno de API: Swagger UI
-
-<img width="1191" height="989" alt="image" src="https://github.com/user-attachments/assets/1edeb1a7-4488-4002-bdad-03cfa9a6a936" />
-
-<img width="1775" height="850" alt="image" src="https://github.com/user-attachments/assets/bcd1acd5-50a5-4df0-bada-a6e70ebee85d" />
-
-<img width="1788" height="529" alt="image" src="https://github.com/user-attachments/assets/3973b234-ddf3-4d30-97f3-9c35c0ad2991" />
-
-Mensajería: RabbitMQ Management
-
-<img width="1836" height="603" alt="image" src="https://github.com/user-attachments/assets/12879ef9-d98a-4aca-99e7-e9ab5a6624b3" />
-
-<img width="1493" height="616" alt="image" src="https://github.com/user-attachments/assets/2925d6e9-95c9-48e4-87e6-99555de85090" />
-
-Observabilidad: Health Check & Logs
-
-<img width="367" height="221" alt="image" src="https://github.com/user-attachments/assets/2a53590c-250c-4971-bb19-b4841657cbc4" />
-
-<img width="1099" height="215" alt="image" src="https://github.com/user-attachments/assets/28d6e7c3-6edc-48f8-89a4-bb0043b545c4" />
-
-Integración Legada: Flujo C (Inbox)
-
-<img width="506" height="285" alt="image" src="https://github.com/user-attachments/assets/cdbf10c2-ac43-4897-b413-368d91420711" />
-
-
-
-
-
+docker compose logs -f notification-service
+```
 
 
