@@ -72,6 +72,15 @@
           "200": { "description": "Estado actual del Circuit Breaker" }
         }
       }
+    },
+    "/simulate-legacy-file": {
+      "post": {
+        "summary": "Simular recepción de archivo de sistema legado (Flujo C)",
+        "description": "Simula que un sistema externo deposita un archivo en la carpeta inbox",
+        "responses": {
+          "200": { "description": "Archivo simulado y pedido procesado" }
+        }
+      }
     }
   },
   "components": {

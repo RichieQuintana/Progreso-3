@@ -155,8 +155,15 @@ async function startWorker() {
                     const monto = Number(order.total_amount || order.amount);
                     const customer = order.customer_name || order.customer || "Unknown";
 
-                    console.log(`\n========== PROCESANDO PEDIDO ==========`);
+                    // Detectar si viene de sistema legado (Flujo C)
+                    const isLegacy = order.source === 'legacy_file';
+                    if (isLegacy) {
+                        console.log(`\n[FLUJO C] ======= ARCHIVO DE SISTEMA LEGADO =======`);
+                    } else {
+                        console.log(`\n========== PROCESANDO PEDIDO ==========`);
+                    }
                     console.log(`ID: ${id} | Cliente: ${customer} | Monto: $${monto}`);
+                    if (isLegacy) console.log(`Origen: Sistema Legado (archivo inbox)`);
 
                     // PASO 1: Validación básica
                     if (isNaN(monto) || monto < 0) {

@@ -206,5 +206,43 @@ app.get('/login-demo', (req, res) => {
     res.json({ token });
 });
 
+// Endpoint para simular Flujo C (Sistema Legado via Archivo)
+app.post('/simulate-legacy-file', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+
+    const legacyOrder = {
+        id: require('crypto').randomUUID(),
+        customer_name: "Sistema Legado ERP",
+        total_amount: Math.floor(Math.random() * 200) + 50,
+        source: "legacy_file",
+        timestamp: new Date().toISOString()
+    };
+
+    // Simular que un sistema externo deposita archivo en inbox
+    const inboxPath = '/app/inbox'; // Path dentro del contenedor worker
+    const filename = `legacy_order_${Date.now()}.json`;
+
+    // Publicar directamente al exchange (simula el resultado del Flujo C)
+    const message = {
+        ...legacyOrder,
+        orderId: legacyOrder.id,
+        customer: legacyOrder.customer_name,
+        amount: legacyOrder.total_amount,
+        eventType: 'OrderCreated'
+    };
+
+    try {
+        channel.publish('order_events', '', Buffer.from(JSON.stringify(message)), { persistent: true });
+        res.json({
+            message: "Archivo de sistema legado simulado",
+            filename: filename,
+            order: legacyOrder
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Iniciar el ciclo de vida resiliente
 startServer();

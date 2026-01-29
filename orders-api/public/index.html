@@ -18,6 +18,8 @@
         .btn-error:hover { background-color: #a71d2a; }
         .btn-random { background-color: #6c757d; }
         .btn-random:hover { background-color: #5a6268; }
+        .btn-legacy { background-color: #17a2b8; }
+        .btn-legacy:hover { background-color: #138496; }
         code { background: #eee; padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
     </style>
 </head>
@@ -34,6 +36,7 @@
         <button onclick="crearPedido(50)">Pedido Fijo ($50)</button>
         <button class="btn-random" onclick="crearPedidoAleatorio(true)">Pedido Azar (Válido)</button>
         <button class="btn-error" onclick="crearPedidoAleatorio(false)">Pedido Azar (Negativo -> DLQ)</button>
+        <button class="btn-legacy" onclick="simularSistemaLegado()">Simular Sistema Legado (Flujo C)</button>
     </div>
 
     <div class="card">
@@ -130,6 +133,19 @@
                 }
             } catch (e) {
                 alert('Error de conexión con la API');
+            }
+        }
+
+        // 5. Simular Sistema Legado (Flujo C)
+        async function simularSistemaLegado() {
+            try {
+                const res = await fetch(`${API_URL}/simulate-legacy-file`, { method: 'POST' });
+                const data = await res.json();
+                console.log('[Flujo C] Sistema legado simulado:', data);
+                alert(`Flujo C: Archivo "${data.filename}" recibido de sistema legado.\nCliente: ${data.order.customer_name}\nMonto: $${data.order.total_amount}`);
+                await loadOrders();
+            } catch (e) {
+                alert('Error simulando sistema legado: ' + e.message);
             }
         }
 
